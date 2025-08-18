@@ -137,5 +137,6 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-src/config.json
+config.json
 src/popup/popup-dist.css
+dist-server

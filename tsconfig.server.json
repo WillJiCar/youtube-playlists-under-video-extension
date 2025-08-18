@@ -1,0 +1,18 @@
+// tsconfig.server.json (for Node.js backend)
+{
+  "extends": "./tsconfig.json", // Inherit base config
+  "compilerOptions": {
+    "module": "nodenext", // Node.js requires CommonJS
+    "moduleResolution": "nodenext",
+    "target": "ES2020",
+    "outDir": "./dist-server",
+    "rootDir": "./server",
+    "esModuleInterop": true,
+    "verbatimModuleSyntax": false,
+    "sourceMap": false,
+    "declaration": false,
+    "declarationMap": false,
+    "skipLibCheck": true
+  },
+  "include": ["server/**/*.ts", "config.json"]
+}

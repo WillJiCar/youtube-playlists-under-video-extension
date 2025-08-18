@@ -1,33 +1,11 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8" />
-  <title>YouTube Playlist Extension</title>
-  <link rel="stylesheet" href="./popup-dist.css">
-</head>
-<body class="popup-body" data-bind="css: {'dark': darkMode}">
-    <div class="container mx-auto">
-      <!-- Header -->
-      <header class="flex items-center justify-between mb-4">
-        <h1 class="text-lg font-bold" data-bind="text: title"></h1>
-        <button data-bind="click: loginBtn, text: loginText, style: { display: showLoginButton ? 'block' : 'none'}" style="display: none;">
-          Login with Google
-        </button>
-        <button data-bind="click: refresh, css: {'animate-spin': isLoading}" class="px-3 py-1 text-white bg-blue-500 rounded">
-          Refresh
-        </button>
-      </header>
-
-      <div data-bind="text: status"></div>
-      
-      <!-- Playlist List -->
-      <ul data-bind="foreach: playlists" class="space-y-2 max-h-[400px] overflow-y-auto">
-        <li class="flex items-center p-2 rounded hover:bg-gray-100">
-          <input data-bind="checked: $parent.selectedPlaylists" type="checkbox" class="mr-2">
-          <span class="truncate"></span>
-        </li>
-      </ul>
-    </div>
-    <script src="./popup.js" type="module"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <title>YouTube Playlist Extension</title>
+  </head>
+  <body class="popup-body">
+    <div id="root"></div>
+    <script src="./popup.tsx" type="module"></script>
+  </body>
 </html>

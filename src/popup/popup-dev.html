@@ -44,9 +44,7 @@
     const iframe = document.querySelector('iframe');
     
     // Wait for popup to load
-    iframe.addEventListener('load', () => {
-      localStorage.setItem('testMode', 'true'); // Default to test mode
-      
+    iframe.addEventListener('load', () => {      
       document.getElementById('toggleMode').addEventListener('click', () => {
         const currentMode = localStorage.getItem('testMode') === 'true';
         localStorage.setItem('testMode', !currentMode);
