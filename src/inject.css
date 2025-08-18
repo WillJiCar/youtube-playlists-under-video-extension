@@ -1,0 +1,23 @@
+.yt-playlist-extension {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+  background: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.yt-playlist-extension label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.yt-playlist-extension input[type="checkbox"] {
+  transform: scale(1.1);
+  cursor: pointer;
+}

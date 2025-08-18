@@ -1,0 +1,15 @@
+{
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/popup/popup.css -o ./src/popup/popup-dist.css --minify",
+    "build:extension": "web-ext build",
+    "dev": "concurrently \"npm run watch:css\" \"http-server src -p 8080 --cors'*' -c-1\"",
+    "start": "concurrently \"npm run watch:css\" \"web-ext run --devtools\"",
+    "watch:css": "tailwindcss -i ./src/popup/popup.css -o ./src/popup/popup-dist.css --watch"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "dotenv": "^17.2.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1"
+  }
+}

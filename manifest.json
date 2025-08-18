@@ -1,0 +1,28 @@
+{
+  "manifest_version": 2,
+  "name": "YouTube Playlist Manager",
+  "version": "1.0",
+  "permissions": [
+    "identity",
+    "storage",
+    "tabs",
+    "https://www.googleapis.com/*",
+    "webRequest",
+    "webRequestBlocking",
+    "https://accounts.google.com/*"
+  ],
+  "background": {
+    "page": "src/bg.html",
+    "persistent": true
+  },
+  "browser_action": {
+    "default_popup": "src/popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://www.youtube.com/watch*"],
+      "js": ["src/lib/content.js"],
+      "css": ["src/inject.css"]
+    }
+  ]
+}
