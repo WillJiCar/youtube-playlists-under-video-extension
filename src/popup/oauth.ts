@@ -29,12 +29,29 @@ export async function loginWithGoogle() {
   console.log("redirect_uri", redirect_uri)
 
   console.log("Environment", env);
-  if(env == "local" && false){
+  if(env == "local"){
     // if calling from a local dev extension, call to local express server in order to use a static redirect URI
     
-    const proxyUrl = `http://localhost:${port}/auth/proxy`;
+    const proxyUrl = `https://localhost:${port}/auth/login`;
     console.log("Proxying auth to", proxyUrl)
-    token = await fetch(proxyUrl).then(() => handleProxyResponse(port));
+    const proxyResponse = await fetch(proxyUrl);
+
+    const { url } = await proxyResponse.json();
+
+    // Open in new tab and listen for response#
+    console.log("Opening new tab to ", url);
+    const tab = await browser.tabs.create({ url: url });
+
+    token = await new Promise((resolve) => {
+      browser.runtime.onMessage.addListener(function listener(message) {
+        console.log("got message", message);
+        if (message.type == 'OAUTH_RESULT') {
+          console.log("got OAUTH_RESULT", message.token, tab);
+          browser.tabs.remove(tab.id!);
+          resolve(message.token); 
+        }
+      });
+    });
     console.log("Got token from proxy", token);
   } else {
     // otherwise use launchWebAuthFlow
@@ -82,14 +99,4 @@ export async function isTokenValid(token: string) {
     console.log("Token validation failed", err);
     return false;
   }
-}
-
-function handleProxyResponse(port: number) {
-  return new Promise((resolve) => {
-    window.addEventListener('message', (event) => {
-      if (event.origin === `http://localhost:${port}` && event.data.type === 'oauth_response') {
-        resolve(event.data.token);
-      }
-    });
-  });
 }

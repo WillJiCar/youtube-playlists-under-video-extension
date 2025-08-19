@@ -4,12 +4,13 @@
     "build": "vite build",
     "build:watch": "vite build --watch",
     "ext:watch": "wait-on dist/manifest.json && web-ext run --devtools --source-dir ./dist --firefox-profile ./dev-profile --profile-create-if-missing",
-    "server:build": "rimraf dist-server && tsc -p tsconfig.server.json",
-    "server:watch": "ts-node-dev --respawn --transpile-only --project tsconfig.server.json server/server.ts",
-    "dev": "concurrently -k -n REACT,EXT,PROXY -c blue,green,magenta \"npm run build:watch\" \"npm run ext:watch\" \"npm run server:watch\"",
+    "server:build": "rimraf dist-server && tsc -p server/tsconfig.json",
+    "server:watch": "ts-node-dev --respawn --transpile-only --project server/tsconfig.json server/server.ts",
+    "dev": "concurrently -k -n SERVER,REACT,EXT -c blue,green,magenta \"npm run server:watch\" \"npm run build:watch\" \"npm run ext:watch\"",
     "build:extension": "web-ext build"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
@@ -27,8 +28,10 @@
   "dependencies": {
     "@types/firefox-webext-browser": "^120.0.4",
     "@vitejs/plugin-react": "^4.7.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "googleapis": "^156.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vite": "^6.3.5"

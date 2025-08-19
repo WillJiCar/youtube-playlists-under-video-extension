@@ -25,7 +25,12 @@ export default defineConfig(async () => {
             rollupOptions: {
                 input: {
                     popup: resolve(__dirname, "src/popup/popup.html"),
-                    bg: resolve(__dirname, "src/bg.html")
+                    background: resolve(__dirname, "src/background/background.html"),
+                    content: resolve(__dirname, "src/content/content.ts")
+                },
+                output: {
+                    entryFileNames: '[name].js', // Ensures clean output names
+                    assetFileNames: 'assets/[name].[ext]'
                 }
             }
         }

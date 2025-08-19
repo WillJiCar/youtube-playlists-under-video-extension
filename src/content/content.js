@@ -1,3 +1,4 @@
+/*
 (async function() {
   const { selectedPlaylists, accessToken } = await browser.storage.local.get(["selectedPlaylists", "accessToken"]);
   if (!selectedPlaylists || !accessToken) return;
@@ -76,3 +77,4 @@ async function removeFromPlaylist(playlistId, videoId) {
     });
   }
 }
+*/

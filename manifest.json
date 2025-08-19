@@ -8,11 +8,12 @@
     "tabs",
     "https://www.googleapis.com/*",
     "webRequest",
+    "webNavigation",
     "webRequestBlocking",
     "https://accounts.google.com/*"
   ],
   "background": {
-    "page": "src/bg.html",
+    "page": "src/background/background.html",
     "persistent": true
   },
   "browser_action": {
@@ -25,9 +26,8 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://www.youtube.com/watch*"],
-      "js": ["src/lib/content.js"],
-      "css": ["src/inject.css"]
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
     }
   ]
 }

@@ -140,3 +140,4 @@ vite.config.ts.timestamp-*
 config.json
 src/popup/popup-dist.css
 dist-server
+certs
