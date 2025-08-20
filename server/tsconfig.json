@@ -14,5 +14,5 @@
     "declarationMap": false,
     "skipLibCheck": true
   },
-  "include": ["server/**/*.ts", "config.json"]
+  "include": ["server/**/*"]
 }

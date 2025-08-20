@@ -1,7 +1,14 @@
 module.exports = {
-  content: ["./src/**/*.{html,js}"],
+  content: ["./src/**/*.{html,js,ts,tsx,jsx}"],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        'segoue': "Segoe UI"
+      },
+      colors:{
+        soft: "#212121"
+      }
+    },
   },
   plugins: [],
   corePlugins: {

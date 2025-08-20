@@ -100,3 +100,9 @@ export async function isTokenValid(token: string) {
     return false;
   }
 }
+
+export const getPlaylists = async (token: string) => {
+  return await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50", { 
+    headers: { Authorization: `Bearer ${token}` } 
+  }).then(res => res.json());
+}

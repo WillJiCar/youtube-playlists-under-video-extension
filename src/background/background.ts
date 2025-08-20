@@ -1,4 +1,4 @@
-import { isTokenValid, loginWithGoogle } from "../popup/oauth.js";
+import { isTokenValid, loginWithGoogle } from "../google.js";
 
 export interface BrowserMessage {
   action: "getToken" | "login" | "OAUTH_RESULT"

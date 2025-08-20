@@ -141,3 +141,4 @@ config.json
 src/popup/popup-dist.css
 dist-server
 certs
+src/google-json-responses.txt.ts

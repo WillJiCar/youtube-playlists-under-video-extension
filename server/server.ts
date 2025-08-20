@@ -8,6 +8,8 @@ import dotenv from "dotenv";
 import url from "url";
 import { google } from "googleapis";
 import { getCallbackHtml } from "./callback";
+import path from "path";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -17,6 +19,7 @@ const PORT = config.proxyPort; // json config is shared with the extension
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "mock_";
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "secret_";
 const REDIRECT_URI = `https://localhost:${PORT}/auth/callback`;
+const AUTH_STATE = crypto.randomBytes(32).toString("hex");
 
 const oauth2Client = new google.auth.OAuth2({
   client_id: CLIENT_ID,
@@ -43,6 +46,8 @@ if(fs.existsSync(certPath) && fs.existsSync(keyPath)){
   server = app;
 }
 
+app.use("/assets", express.static(path.join(__dirname, "wwwroot")));
+
 app.use(cors({
   origin: [
     /moz-extension:\/\/*/, // Allows all Firefox extension origins
@@ -55,12 +60,7 @@ app.use(cors({
 app.use(cookieParser());
 
 app.get("/", (req, res) => {
-  res.status(200).send(`<!DOCTYPE html>
-<html lang="en">
-<body>
-    yo
-</body>
-</html>`);
+  res.json({ status: "yo" });
 })
 
 // called after clicking login button
@@ -69,7 +69,8 @@ app.get("/auth/login", (req, res) => {
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: ["https://www.googleapis.com/auth/youtube"],
-    response_type: "code"
+    response_type: "code",
+    state: AUTH_STATE
   });
   // TODO - add crypto state to verify callback - https://developers.google.com/identity/protocols/oauth2/web-server#node.js_1    
   console.log("sending redirect URL:", url);
@@ -83,6 +84,9 @@ app.get("/auth/callback", async (req, res) => {
     if(q.error){
       console.log("Error:", q.error);
       throw new Error(q.error as string ?? "eror");
+    }
+    if(q.state !== (req as any).session.state){
+      throw new Error("Invalid auth");
     }
     if(!q.code){
       throw new Error("No code");
@@ -100,17 +104,6 @@ app.get("/auth/callback", async (req, res) => {
   } catch(err){
     res.send("Error, that's all folks!")
   }
-
-  
-
-  /*
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true, // not accessible via JS
-      secure: true,   // only sent over HTTPS
-      sameSite: 'lax', // prevents CSRF
-      maxAge: 1000 * 60 * 60 * 24 * 30 // 30 days
-    });
-  */
 });
 
 app.get("/auth/token", (req, res) => {

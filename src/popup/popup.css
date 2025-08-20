@@ -2,33 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Extension-specific overrides */
-.popup-body {
-  @apply w-[300px] h-[500px] p-4 bg-white;
-}
-
 body {
   font-family: sans-serif;
-  padding: 10px;
-  min-width: 250px;
 }
-button {
-  margin-bottom: 10px;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 4px;
-  background: #cc0000;
-  color: white;
-  cursor: pointer;
+
+.link-button {
+  @apply text-xs italic underline hover:cursor-pointer active:scale-95 select-none
 }
-button:hover {
-  background: #ff0000;
+
+.button {
+  @apply active:scale-95 cursor-pointer select-none
 }
-.playlist-list {
-  max-height: 300px;
-  overflow-y: auto;
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;      
+  scrollbar-color: #888 #f1f1f1; 
 }
-label {
-  display: block;
-  margin: 4px 0;
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; 
+}
+
+*::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #888;    
+  border-radius: 10px;      
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #555;   
 }
