@@ -1,5 +1,4 @@
 {
-  "extends": "../tsconfig.json", // Inherit base config
   "compilerOptions": {
     "module": "nodenext", // Node.js requires CommonJS
     "moduleResolution": "nodenext",

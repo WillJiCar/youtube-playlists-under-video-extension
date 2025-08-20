@@ -7,9 +7,9 @@ import https from "https";
 import dotenv from "dotenv";
 import url from "url";
 import { google } from "googleapis";
-import { getCallbackHtml } from "./callback";
 import path from "path";
 import crypto from "crypto";
+import { getAuthUrl, getCallbackHtml } from "./services";
 
 dotenv.config();
 
@@ -20,14 +20,6 @@ const CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "mock_";
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "secret_";
 const REDIRECT_URI = `https://localhost:${PORT}/auth/callback`;
 const AUTH_STATE = crypto.randomBytes(32).toString("hex");
-
-const oauth2Client = new google.auth.OAuth2({
-  client_id: CLIENT_ID,
-  client_secret: CLIENT_SECRET,
-  redirect_uris: [REDIRECT_URI]
-});
-
-google.options({auth: oauth2Client});
 
 const keyPath = "./certs/localhost-key.pem";
 const certPath = "./certs/localhost.pem";
@@ -65,36 +57,42 @@ app.get("/", (req, res) => {
 
 // called after clicking login button
 app.get("/auth/login", (req, res) => {
-
-  const url = oauth2Client.generateAuthUrl({
-    access_type: "offline",
-    scope: ["https://www.googleapis.com/auth/youtube"],
-    response_type: "code",
-    state: AUTH_STATE
+  const oauth2Client = new google.auth.OAuth2({
+    client_id: CLIENT_ID,
+    client_secret: CLIENT_SECRET,
+    redirect_uris: [REDIRECT_URI]
   });
-  // TODO - add crypto state to verify callback - https://developers.google.com/identity/protocols/oauth2/web-server#node.js_1    
-  console.log("sending redirect URL:", url);
+  const url = getAuthUrl(oauth2Client, AUTH_STATE);
   res.json({ url: url });
 });
 
 app.get("/auth/callback", async (req, res) => {
   try{
     let q = url.parse(req.url, true).query;
+    const state = (req as any).session.state;
 
     if(q.error){
       console.log("Error:", q.error);
       throw new Error(q.error as string ?? "eror");
     }
-    if(q.state !== (req as any).session.state){
+    if(q.state !== state){
       throw new Error("Invalid auth");
     }
     if(!q.code){
       throw new Error("No code");
     }
+
+    const oauth2Client = new google.auth.OAuth2({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      redirect_uris: [REDIRECT_URI]
+    }); // TODO - fix this
+
     const { tokens } = await oauth2Client.getToken({ code: Array.isArray(q.code) ? q.code[0] as string : q.code });
 
-    oauth2Client.credentials = tokens;
+    oauth2Client.setCredentials(tokens);
     const token = tokens.access_token;
+    
     if(token){
       console.log("token acquited, sending to client", token);
       res.send(getCallbackHtml(token));

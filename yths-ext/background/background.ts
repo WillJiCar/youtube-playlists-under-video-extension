@@ -4,15 +4,14 @@ export interface BrowserMessage {
   action: "getToken" | "login" | "OAUTH_RESULT"
 }
 
-if (!window.browser) {
+if (!window.browser) { // if running through vite dev server
   console.log("creating simulated browser object")
-  // Running in simulation mode through popup-dev.html
   window.browser = {
     storage: {
         local: {
             get: (key: string) => {
-            const value = localStorage.getItem(key);
-            return value ? JSON.parse(value) : null;
+              const value = localStorage.getItem(key);
+              return value ? JSON.parse(value) : null;
             },
             set: (key: string, value: unknown) => {
                 localStorage.setItem(key, JSON.stringify(value));
@@ -45,8 +44,8 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if(token){
         const valid = await isTokenValid(token);
         if (!valid) {
-          console.log("Stored token is invalid or expired, clearing...");
-          token = await loginWithGoogle();
+          console.log("Stored token is invalid or expired");
+          
         }
       } else {
         console.log("Token not found in storage, returning null");
@@ -57,12 +56,3 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   } 
 });
-
-// OBSOLETE - below doesn't work due to localStorage not being accessible from a firefox extension
-window.addEventListener("storage", (ev) => {
-  console.log("got event", ev);
-  if(ev.key == "YTHS_ACCESS_TOKEN"){
-    browser.storage.local.set({ accessToken: ev.newValue });
-    window.localStorage.removeItem("YTHS_ACCESS_TOKEN");
-  }
-})

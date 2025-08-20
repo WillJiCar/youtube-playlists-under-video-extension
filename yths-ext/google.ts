@@ -1,12 +1,15 @@
 
 // console - https://console.cloud.google.com/apis/api/youtube.googleapis.com/metrics?authuser=1&inv=1&invt=Ab5vyA&project=youtube-playlists-under-video
 
-const scopes = "https://www.googleapis.com/auth/youtube";
+import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse } from "./types";
+
+const scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile";
 
 interface ExtensionConfig {
   clientId?: string
   environment?: "local"
   proxyPort?: number
+  proxyDomain?: string
 }
 
 export async function getConfig() {
@@ -20,25 +23,22 @@ export async function getConfig() {
   }
 }
 
-export async function loginWithGoogle() {
+export async function loginWithGoogle(useServerAuth = true) {
   let token = null;
   const config = await getConfig();
-  const env = config?.environment;
   const port = config?.proxyPort ?? 3000;
-  const redirect_uri = `${browser.identity.getRedirectURL()}google-auth`
-  console.log("redirect_uri", redirect_uri)
+  const domain = config?.proxyDomain ?? "localhost";
 
-  console.log("Environment", env);
-  if(env == "local"){
-    // if calling from a local dev extension, call to local express server in order to use a static redirect URI
+  if(useServerAuth){
+    // authenticate using our server so we can fetch refresh_tokens securely with client secret
     
-    const proxyUrl = `https://localhost:${port}/auth/login`;
+    const proxyUrl = `https://${domain}:${port}/auth/login`;
     console.log("Proxying auth to", proxyUrl)
     const proxyResponse = await fetch(proxyUrl);
 
     const { url } = await proxyResponse.json();
 
-    // Open in new tab and listen for response#
+    // Open in new tab and listen for response
     console.log("Opening new tab to ", url);
     const tab = await browser.tabs.create({ url: url });
 
@@ -61,6 +61,9 @@ export async function loginWithGoogle() {
     if(!clientId){
       throw new Error("Unable to fetch clientId");
     }
+
+    const redirect_uri = `${browser.identity.getRedirectURL()}google-auth`
+    console.log("redirect_uri", redirect_uri)
 
     const authUrl = `https://accounts.google.com/o/oauth2/auth?` +
       `client_id=${clientId}` +
@@ -101,8 +104,20 @@ export async function isTokenValid(token: string) {
   }
 }
 
-export const getPlaylists = async (token: string) => {
+export const getPlaylists = async (token: string): Promise<PlaylistsResponse> => {
   return await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50", { 
+    headers: { Authorization: `Bearer ${token}` } 
+  }).then(res => res.json());
+}
+
+export const getUserInfo = async (token: string): Promise<PeopleApiResponse> => {
+  return await fetch("https://people.googleapis.com/v1/people/me?personFields=names", {
+    headers: { Authorization: `Bearer ${token}` } 
+  }).then(res => res.json());
+}
+
+export const getChannel = async (token: string): Promise<ChannelResponse> => {
+  return await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
     headers: { Authorization: `Bearer ${token}` } 
   }).then(res => res.json());
 }

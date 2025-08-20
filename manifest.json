@@ -13,11 +13,11 @@
     "https://accounts.google.com/*"
   ],
   "background": {
-    "page": "src/background/background.html",
+    "page": "background/background.html",
     "persistent": true
   },
   "browser_action": {
-    "default_popup": "src/popup/popup.html"
+    "default_popup": "popup/popup.html"
   },
   "browser_specific_settings": {
     "gecko": {

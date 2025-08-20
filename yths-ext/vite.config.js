@@ -10,23 +10,23 @@ export default defineConfig(async () => {
         plugins: [react(), viteStaticCopy({
             targets: [
             {
-                src: 'manifest.json', // this allows web-ext run to load from the dist folder correctly
+                src: '../manifest.json', // this allows web-ext run to load from the dist folder correctly
                 dest: './'
             },
             {
-                src: "config.json",
+                src: "../config.json",
                 dest: "./"
             }
         ]
         })],
         root: ".",
         build: {
-            outDir: "dist",
+            outDir: "dist-ext",
             rollupOptions: {
                 input: {
-                    popup: resolve(__dirname, "src/popup/popup.html"),
-                    background: resolve(__dirname, "src/background/background.html"),
-                    content: resolve(__dirname, "src/content/content.ts")
+                    popup: resolve(__dirname, "popup/popup.html"),
+                    background: resolve(__dirname, "background/background.html"),
+                    content: resolve(__dirname, "content/content.ts")
                 },
                 output: {
                     entryFileNames: '[name].js', // Ensures clean output names
