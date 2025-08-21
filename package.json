@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "concurrently -k -n SERVER,REACT,EXT -c blue,green,magenta \"npm run dev:server\" \"npm run dev:vitebuild\" \"npm run dev:ext\"",
+    "dev:sim": "concurrently -k -n SERVER,REACT -c blue,green \"npm run dev:server\" \"npm run dev:vite\"",
     "dev:vite": "yarn workspace yths-ext dev:vite",
     "dev:vitebuild": "yarn workspace yths-ext dev:vitebuild",
     "dev:ext": "yarn workspace yths-ext dev:ext",

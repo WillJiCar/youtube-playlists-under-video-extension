@@ -1,13 +1,14 @@
 import "./popup.css";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, version } from "react";
 import { createRoot } from "react-dom/client";
-import { getChannel, getPlaylists, getUserInfo } from "../google";
+import { getChannel, getPlaylists, getUserInfo, login } from "../apis";
 import { channelThumbnailSmall, getPlaylistsResponse } from "../google-json-responses.txt";
 import dayjs from "dayjs";
 import { Spinner } from "./components/Spinner";
 import Skeleton from "./components/Skeleton";
 import type { PlaylistItem } from "../types";
-import { convertImageToBase64 } from "../helpers";
+import { APP_VERSION, convertImageToBase64, hs } from "../helpers";
+import { getTokensFromStorage, getUserUid, type StoredTokens } from "../browser";
 
 const Popup = (props?: { extensionMode?: boolean }) => {
 
@@ -32,21 +33,13 @@ const Popup = (props?: { extensionMode?: boolean }) => {
             
             (async () => {
                 try{
-                    if(extensionMode){
-                        setIsInitializing(true);
-
-                        let userUid = await browser.storage.local.get("userUid");
-                        if(!userUid){
-                            //userUid = crypto.
-                        }
-                        const token = await getToken();
-                        if(token){                            
-                            await getData(token);
-                            setIsLoggedIn(true);
-                        } 
-                    } else {
+                    setIsInitializing(true);
+                    getUserUid(); // will set new uuid if none available
+                    const tokens = await callGetTokens();
+                    if(tokens.access_token){                            
+                        await getData(tokens.access_token);
                         setIsLoggedIn(true);
-                    }
+                    } 
                 } catch(err: any){
                     console.log("Init failed", err);
                 } finally{
@@ -59,13 +52,22 @@ const Popup = (props?: { extensionMode?: boolean }) => {
 
     const onClickLogin = async () => {
         try{
-            if(extensionMode){
-                setIsInitializing(true);
-                const token = await window.browser.runtime.sendMessage({ action: "login" });
-                console.log("Got token", token);                
-                await getData(token);
-                setIsLoggedIn(true);
+            setIsInitializing(true);
+            let tokens = null;
+            if(extensionMode){                
+                tokens = await window.browser.runtime.sendMessage({ action: "login" }) as StoredTokens | null;
+            } else {
+                tokens = await login();
             }
+
+            
+            if(tokens?.access_token){
+                hs.log("logged in");
+                await getData(tokens?.access_token);
+                setIsLoggedIn(true);
+            } else {
+                hs.log("login failed, access_token missing");
+            }            
         } catch(err: any){
             console.log("Login failed", err);
             setError(ERROR_MESSAGE)
@@ -76,47 +78,88 @@ const Popup = (props?: { extensionMode?: boolean }) => {
 
     const getData = async (token: string) => {
         try{
+
+            let PLAYLISTS: PlaylistItem[] | null | undefined = null;
+            let CHANNEL_NAME: string | null | undefined = null;
+            let PROFILE_PICTURE_BASE64: string | null | undefined = null;
+            let ACCOUNT_NAME: string | null | undefined = null;
+            let update = false;
+
             setIsFetchingData(true);
 
-            const playlistsResponse = await getPlaylists(token);
-            const PLAYLISTS = playlistsResponse.items;
-            console.log("Got playlists", PLAYLISTS);            
-
-            const channelResponse = await getChannel(token);
-            if(channelResponse.items.length == 0){
-                throw new Error("Unable to get channel info, invalid account");
-            }
-            const channel = channelResponse.items[0]?.snippet;
-            const CHANNEL_NAME = channel?.title;
-            console.log("Got channel name", CHANNEL_NAME);
-
-            const profilePictureUrl = channel?.thumbnails?.default?.url;
-            const PROFILE_PICTURE_BASE64 = profilePictureUrl ? await convertImageToBase64(profilePictureUrl) : null;
-            console.log("Got profile picture (base64)", PROFILE_PICTURE_BASE64);
-
-            const user = await getUserInfo(token);
-            if(user.names.length == 0){
-                throw new Error("Unable to fetch channel name, invalid account");
-            }
-            const ACCOUNT_NAME = user.names[0]?.displayName;
-            console.log("Got account name", ACCOUNT_NAME);        
-            
             if(extensionMode){
                 // store data in browser.storage
-                await browser.storage.sync.set({
-                    PLAYLISTS,
-                    CHANNEL_NAME,
-                    ACCOUNT_NAME,
-                    PROFILE_PICTURE_BASE64
-                });
+                const storeResponse = await browser.storage.sync.get([
+                    "PLAYLISTS",
+                    "CHANNEL_NAME",
+                    "ACCOUNT_NAME",
+                    "PROFILE_PICTURE_BASE64"
+                ]);
+                PLAYLISTS = storeResponse["PLAYLISTS"];
+                CHANNEL_NAME = storeResponse["CHANNEL_NAME"];
+                ACCOUNT_NAME = storeResponse["ACCOUNT_NAME"];
+                PROFILE_PICTURE_BASE64 = storeResponse["PROFILE_PICTURE_BASE64"];
             } else {
                 // store data in localstorage
-                window.localStorage.setItem("PLAYLISTS", JSON.stringify(PLAYLISTS));
-                window.localStorage.setItem("CHANNEL_NAME", CHANNEL_NAME ?? "N/A");
-                window.localStorage.setItem("ACCOUNT_NAME", ACCOUNT_NAME ?? "N/A");
-                if(PROFILE_PICTURE_BASE64)
-                    window.localStorage.setItem("PROFILE_PICTURE_BASE64", PROFILE_PICTURE_BASE64);
-            }   
+                PLAYLISTS = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
+                CHANNEL_NAME = window.localStorage.getItem("CHANNEL_NAME");
+                ACCOUNT_NAME = window.localStorage.getItem("ACCOUNT_NAME");
+                PROFILE_PICTURE_BASE64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
+            }
+
+            if(!PLAYLISTS || (PLAYLISTS.length > 0 && (PLAYLISTS[0] as any) == "null")){
+                const playlistsResponse = await getPlaylists(token);
+                PLAYLISTS = playlistsResponse.items;
+                console.log("Got playlists", PLAYLISTS);            
+                update = true;
+            }
+
+            if(!CHANNEL_NAME){
+                const channelResponse = await getChannel(token);
+                if(channelResponse.items.length == 0){
+                    throw new Error("Unable to get channel info, invalid account");
+                }
+                const channel = channelResponse.items[0]?.snippet;
+                CHANNEL_NAME = channel?.title;
+                console.log("Got channel name", CHANNEL_NAME);
+
+                const profilePictureUrl = channel?.thumbnails?.default?.url;
+                PROFILE_PICTURE_BASE64 = profilePictureUrl ? await convertImageToBase64(profilePictureUrl) : null;
+                console.log("Got profile picture (base64)", PROFILE_PICTURE_BASE64);
+                update = true;
+            }
+
+            if(!ACCOUNT_NAME){
+                const user = await getUserInfo(token);
+                if(user.names.length == 0){
+                    throw new Error("Unable to fetch channel name, invalid account");
+                }
+                ACCOUNT_NAME = user.names[0]?.displayName;
+                console.log("Got account name", ACCOUNT_NAME);        
+                update = true;
+            }
+            
+            if(update){
+                if(extensionMode){
+                    // store data in browser.storage
+                    await browser.storage.sync.set({
+                        PLAYLISTS,
+                        CHANNEL_NAME,
+                        ACCOUNT_NAME,
+                        PROFILE_PICTURE_BASE64
+                    });
+                } else {
+                    // store data in localstorage
+                    window.localStorage.setItem("PLAYLISTS", JSON.stringify(PLAYLISTS));
+                    window.localStorage.setItem("CHANNEL_NAME", CHANNEL_NAME ?? "N/A");
+                    window.localStorage.setItem("ACCOUNT_NAME", ACCOUNT_NAME ?? "N/A");
+                    if(PROFILE_PICTURE_BASE64)
+                        window.localStorage.setItem("PROFILE_PICTURE_BASE64", PROFILE_PICTURE_BASE64);
+                }   
+            }
+
+            setPlaylists(PLAYLISTS);
+            console.log("data fetched", CHANNEL_NAME);
         }
         catch(err){
             console.log(err);
@@ -127,16 +170,17 @@ const Popup = (props?: { extensionMode?: boolean }) => {
         }
     }
 
-    const getToken = async () => {
-        const token = await window.browser.runtime.sendMessage({ action: "getToken" });
-        return token;
+    const callGetTokens = async () => {
+        if(extensionMode){
+            return await window.browser.runtime.sendMessage({ action: "getToken" }) as StoredTokens;
+        } else {
+            return await getTokensFromStorage();
+        }        
     }
 
     const onTogglePlaylist = (id: string) => {
         setSelectedPlaylists(v => v?.includes(id) ? v.filter(p => p != id) : [...(v ?? []), id]);
     }
-
-    const version = "loc.0.2";
 
     return(
         <>
@@ -144,7 +188,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
         {
             isInitializing
             ?
-                <Skeleton version={version} pulse={true}>
+                <Skeleton version={APP_VERSION} pulse={true}>
                     <div className="absolute top-0 left-0 z-10 flex flex-col items-center justify-center w-full h-full bg-black/25">
                         <Spinner/>
                     </div>
@@ -163,7 +207,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                                 <div className="text-sm">{getPlaylistsResponse.items.length} playlists</div>
                             </div>
                             <div className="flex flex-col ml-auto text-xs text-right">
-                                <div>{version}</div>
+                                <div>{APP_VERSION}</div>
                             </div>                
                         </div>
                         {/* Playlists */}
@@ -209,11 +253,11 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                         }                        
                     </>
                 :
-                    <Skeleton version={version}>
+                    <Skeleton version={APP_VERSION}>
                         <div className="absolute top-0 left-0 flex flex-col items-center w-full h-full justify-evenly bg-black/25">
                             <div></div>
                             <div className="flex ">
-                                <div className="p-2 px-4 text-white bg-[#db4a39] border rounded button w-[180px] h-[30px] flex items-center justify-center">{false ? <Spinner/> : "Sign in with Google"}</div>
+                                <div onClick={onClickLogin} className="p-2 px-4 text-white bg-[#db4a39] border rounded button w-[180px] h-[30px] flex items-center justify-center">{false ? <Spinner/> : "Sign in with Google"}</div>
                             </div>
                             <div className="pt-2 font-bold text-red-700">{error}</div>
                         </div>
@@ -232,7 +276,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
     )
 }
 
-console.log("STARTING POPUP")
+hs.log("online")
 const extensionMode = window.browser ? true : false;
 createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

@@ -1,4 +1,5 @@
-import { isTokenValid, loginWithGoogle } from "../google.js";
+import { login } from "../apis.js";
+import { getTokensFromStorage } from "../browser.js";
 
 export interface BrowserMessage {
   action: "getToken" | "login" | "OAUTH_RESULT"
@@ -31,28 +32,12 @@ if (!window.browser) { // if running through vite dev server
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   console.log("received message: ", msg);
   if (msg.action === "login") {
-      loginWithGoogle().then((token) => {
-        sendResponse(token);
-      }).catch((err) => console.log(err));
+      login(sendResponse);
       return true; // this is required when using promises, "sendResponse" is used to callback a response
   }
 
   if (msg.action === "getToken") {
-
-    browser.storage.local.get("accessToken").then(async (storedToken) => {
-      let token = storedToken?.accessToken;
-      if(token){
-        const valid = await isTokenValid(token);
-        if (!valid) {
-          console.log("Stored token is invalid or expired");
-          
-        }
-      } else {
-        console.log("Token not found in storage, returning null");
-      }
-
-      sendResponse(token);
-    });
+    getTokensFromStorage(sendResponse)
     return true;
   } 
 });
