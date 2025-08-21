@@ -2,7 +2,7 @@
 // console - https://console.cloud.google.com/apis/api/youtube.googleapis.com/metrics?authuser=1&inv=1&invt=Ab5vyA&project=youtube-playlists-under-video
 
 import { getTokensFromStorage, getUserUid, storeTokensInStorage, type StoredTokens } from "./browser";
-import { APP_TOKEN_KEY, GOOGLE_ACCESS_TOKEN_KEY, hs } from "./helpers";
+import { hs } from "./helpers";
 import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse } from "./types";
 
 const scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile";
@@ -49,10 +49,10 @@ export const getTokensFromServer = async (sendResponse?: (sendResponse?: any) =>
   let tokens: GetTokensResponse | null = null;
 
   try {
-
     const storedTokens = await getTokensFromStorage();
     const { app_token } = storedTokens;
     if(!app_token){
+      hs.log("unable to fetch a new access_token as app_token is missing from storage");
       return null;
     }
     
@@ -61,7 +61,7 @@ export const getTokensFromServer = async (sendResponse?: (sendResponse?: any) =>
     const domain = config?.proxyDomain ?? "localhost";    
     const proxyUrl = `https://${domain}:${port}/auth/token`;
 
-    hs.log("fetching auth_url on", proxyUrl);
+    hs.log("refreshing access_token on", proxyUrl);
     const proxyResponse = await fetch(proxyUrl, {
       method: "GET",
       headers: {
@@ -77,13 +77,12 @@ export const getTokensFromServer = async (sendResponse?: (sendResponse?: any) =>
 
     tokens = await proxyResponse.json();
 
-    // Optionally store the tokens
     if (tokens?.access_token || tokens?.app_token) {
       await storeTokensInStorage(tokens);
+      hs.log("access_token refresh success");
     }    
   } catch (err) {
     hs.log("Error fetching tokens:", err);
-    return null;
   }
 
   sendResponse && sendResponse(tokens);
@@ -205,10 +204,22 @@ export const getPlaylists = async (token: string): Promise<PlaylistsResponse> =>
   }).then(res => res.json());
 }
 
-export const getUserInfo = async (token: string): Promise<PeopleApiResponse> => {
-  return await fetch("https://people.googleapis.com/v1/people/me?personFields=names", {
-    headers: { Authorization: `Bearer ${token}` } 
-  }).then(res => res.json());
+export const getUserInfo = async (token: string) => {
+  try{
+    const res = await fetch("https://people.googleapis.com/v1/people/me?personFields=names", {
+      headers: { Authorization: `Bearer ${token}` } 
+    })    
+    if(res.status == 401){
+      // access_token requires refresh
+      // then return await getUserInfo(newToken);
+    }
+    const json = await res.json() as PeopleApiResponse;
+    return json;
+  }catch(err){
+    hs.error(err);
+    return null;
+  }
+  
 }
 
 export const getChannel = async (token: string): Promise<ChannelResponse> => {

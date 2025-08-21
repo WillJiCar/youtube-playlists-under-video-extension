@@ -1,7 +1,7 @@
 import { CodeChallengeMethod, Credentials, OAuth2Client, OAuth2ClientOptions } from "google-auth-library"
 import crypto from "crypto";
 import { google } from "googleapis";
-import { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, STATE_SIGNING_SECRET } from "./server";
+import { CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, APP_SECRET } from "./config";
 
 export const isOld = (createdAt: number) => {
     return Date.now() - createdAt > 10 * 60 * 1000
@@ -12,7 +12,7 @@ export const getAppToken = async (userUid: string) => {
 }
 export const encodeJwt = async (payload: string, expiry = 600) => { // default to 10 minutes
     const { SignJWT } = await import("jose");
-    const secret = Buffer.from(STATE_SIGNING_SECRET, "base64");
+    const secret = Buffer.from(APP_SECRET, "base64");
     const now = Math.floor(Date.now() / 1000);
     return await new SignJWT({ p: payload})
         .setProtectedHeader({ alg: "HS256", typ: "JWT"})
@@ -23,7 +23,7 @@ export const encodeJwt = async (payload: string, expiry = 600) => { // default t
 
 export const decodeJwt = async (jwt: string) => {
     const { jwtVerify } = await import("jose");
-    const secret = Buffer.from(STATE_SIGNING_SECRET, "base64");
+    const secret = Buffer.from(APP_SECRET, "base64");
     const { payload } = await jwtVerify(jwt, secret);
     return payload.p as string;
 }
@@ -48,13 +48,15 @@ export const getOAuth2Client = (credentials: Credentials) => {
     return client;
 }
 
-export const getAuthUrl = (oauth2Client: OAuth2Client, state: any, code_challenge: string) => {
+export const getAuthUrl = (state: any, code_challenge: string) => {
+    const oauth2Client = createOAuth2Client();
     const url = oauth2Client.generateAuthUrl({
         access_type: "offline",
         scope: ["https://www.googleapis.com/auth/youtube", "https://www.googleapis.com/auth/userinfo.profile"],
         response_type: "code",
         state,
         code_challenge,
+        prompt: "consent",
         code_challenge_method: CodeChallengeMethod.S256
     });
     return url;

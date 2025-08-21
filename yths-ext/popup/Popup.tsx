@@ -1,14 +1,14 @@
 import "./popup.css";
 import React, { useEffect, useRef, useState, version } from "react";
 import { createRoot } from "react-dom/client";
-import { getChannel, getPlaylists, getUserInfo, login } from "../apis";
+import { login } from "../apis";
 import { channelThumbnailSmall, getPlaylistsResponse } from "../google-json-responses.txt";
 import dayjs from "dayjs";
-import { Spinner } from "./components/Spinner";
+import { LoadingButton, Spinner, SpinnerProvider, useSpinner } from "./components/Spinner";
 import Skeleton from "./components/Skeleton";
 import type { PlaylistItem } from "../types";
 import { APP_VERSION, convertImageToBase64, hs } from "../helpers";
-import { getTokensFromStorage, getUserUid, type StoredTokens } from "../browser";
+import { callGetTokens, getData, getSelectedPlaylistsFromStorage, getTokensFromStorage, getUserUid, setSelectedPlaylistsInStorage, type StoredTokens } from "../browser";
 
 const Popup = (props?: { extensionMode?: boolean }) => {
 
@@ -21,11 +21,14 @@ const Popup = (props?: { extensionMode?: boolean }) => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
     const [error, setError] = useState<string | undefined>();
 
-    const [profilePicture, setProfilePicture] = useState();
-    const [playlists, setPlaylists] = useState<PlaylistItem[] | undefined>(false ? undefined : [...getPlaylistsResponse.items, ...getPlaylistsResponse.items]);
+    const [appData, setAppData] = useState<Awaited<ReturnType<typeof onFetchData>>>();
+    const { accountName, channelName, playlists, profilePictureBase64, accountId } = appData ?? {};
+
     const [selectedPlaylists, setSelectedPlaylists] = useState<string[] | undefined | null>();
 
     const initialized = useRef<boolean>(false);
+
+    const { toggleSpinner } = useSpinner()
 
     useEffect(() => {
         if(!initialized.current){
@@ -36,8 +39,8 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                     setIsInitializing(true);
                     getUserUid(); // will set new uuid if none available
                     const tokens = await callGetTokens();
-                    if(tokens.access_token){                            
-                        await getData(tokens.access_token);
+                    if(tokens?.access_token){                            
+                        await onFetchData(tokens.access_token);
                         setIsLoggedIn(true);
                     } 
                 } catch(err: any){
@@ -49,6 +52,13 @@ const Popup = (props?: { extensionMode?: boolean }) => {
 
         }        
     }, [])
+
+    useEffect(() => {
+        if(selectedPlaylists && accountId){
+            // only update selected playlists once data has been fetched and selected playlists initialized from it
+            setSelectedPlaylistsInStorage(selectedPlaylists, accountId);    
+        }        
+    }, [selectedPlaylists, accountId])
 
     const onClickLogin = async () => {
         try{
@@ -63,7 +73,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
             
             if(tokens?.access_token){
                 hs.log("logged in");
-                await getData(tokens?.access_token);
+                await onFetchData(tokens?.access_token);
                 setIsLoggedIn(true);
             } else {
                 hs.log("login failed, access_token missing");
@@ -76,110 +86,54 @@ const Popup = (props?: { extensionMode?: boolean }) => {
         }
     }
 
-    const getData = async (token: string) => {
+    const onFetchData = async (access_token: string) => {
         try{
-
-            let PLAYLISTS: PlaylistItem[] | null | undefined = null;
-            let CHANNEL_NAME: string | null | undefined = null;
-            let PROFILE_PICTURE_BASE64: string | null | undefined = null;
-            let ACCOUNT_NAME: string | null | undefined = null;
-            let update = false;
-
             setIsFetchingData(true);
-
-            if(extensionMode){
-                // store data in browser.storage
-                const storeResponse = await browser.storage.sync.get([
-                    "PLAYLISTS",
-                    "CHANNEL_NAME",
-                    "ACCOUNT_NAME",
-                    "PROFILE_PICTURE_BASE64"
-                ]);
-                PLAYLISTS = storeResponse["PLAYLISTS"];
-                CHANNEL_NAME = storeResponse["CHANNEL_NAME"];
-                ACCOUNT_NAME = storeResponse["ACCOUNT_NAME"];
-                PROFILE_PICTURE_BASE64 = storeResponse["PROFILE_PICTURE_BASE64"];
-            } else {
-                // store data in localstorage
-                PLAYLISTS = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
-                CHANNEL_NAME = window.localStorage.getItem("CHANNEL_NAME");
-                ACCOUNT_NAME = window.localStorage.getItem("ACCOUNT_NAME");
-                PROFILE_PICTURE_BASE64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
-            }
-
-            if(!PLAYLISTS || (PLAYLISTS.length > 0 && (PLAYLISTS[0] as any) == "null")){
-                const playlistsResponse = await getPlaylists(token);
-                PLAYLISTS = playlistsResponse.items;
-                console.log("Got playlists", PLAYLISTS);            
-                update = true;
-            }
-
-            if(!CHANNEL_NAME){
-                const channelResponse = await getChannel(token);
-                if(channelResponse.items.length == 0){
-                    throw new Error("Unable to get channel info, invalid account");
-                }
-                const channel = channelResponse.items[0]?.snippet;
-                CHANNEL_NAME = channel?.title;
-                console.log("Got channel name", CHANNEL_NAME);
-
-                const profilePictureUrl = channel?.thumbnails?.default?.url;
-                PROFILE_PICTURE_BASE64 = profilePictureUrl ? await convertImageToBase64(profilePictureUrl) : null;
-                console.log("Got profile picture (base64)", PROFILE_PICTURE_BASE64);
-                update = true;
-            }
-
-            if(!ACCOUNT_NAME){
-                const user = await getUserInfo(token);
-                if(user.names.length == 0){
-                    throw new Error("Unable to fetch channel name, invalid account");
-                }
-                ACCOUNT_NAME = user.names[0]?.displayName;
-                console.log("Got account name", ACCOUNT_NAME);        
-                update = true;
-            }
-            
-            if(update){
-                if(extensionMode){
-                    // store data in browser.storage
-                    await browser.storage.sync.set({
-                        PLAYLISTS,
-                        CHANNEL_NAME,
-                        ACCOUNT_NAME,
-                        PROFILE_PICTURE_BASE64
-                    });
-                } else {
-                    // store data in localstorage
-                    window.localStorage.setItem("PLAYLISTS", JSON.stringify(PLAYLISTS));
-                    window.localStorage.setItem("CHANNEL_NAME", CHANNEL_NAME ?? "N/A");
-                    window.localStorage.setItem("ACCOUNT_NAME", ACCOUNT_NAME ?? "N/A");
-                    if(PROFILE_PICTURE_BASE64)
-                        window.localStorage.setItem("PROFILE_PICTURE_BASE64", PROFILE_PICTURE_BASE64);
-                }   
-            }
-
-            setPlaylists(PLAYLISTS);
-            console.log("data fetched", CHANNEL_NAME);
+            const data = await getData(access_token);
+            if(data){
+                setAppData(data);
+                const _selected = await getSelectedPlaylistsFromStorage(data.accountId);
+                setSelectedPlaylists(_selected);
+                return data;
+            }            
         }
         catch(err){
-            console.log(err);
+            hs.error(err);
             setError(ERROR_MESSAGE);
         } 
         finally {
             setIsFetchingData(false);
+            return null;
         }
-    }
-
-    const callGetTokens = async () => {
-        if(extensionMode){
-            return await window.browser.runtime.sendMessage({ action: "getToken" }) as StoredTokens;
-        } else {
-            return await getTokensFromStorage();
-        }        
     }
 
     const onTogglePlaylist = (id: string) => {
         setSelectedPlaylists(v => v?.includes(id) ? v.filter(p => p != id) : [...(v ?? []), id]);
+    }
+
+    const onClickRefresh = async () => {
+        try{
+            toggleSpinner("refresh_button");
+            const tokens = await callGetTokens(true); // refreshes and stores new tokens
+            if(tokens && tokens.access_token){
+                await onFetchData(tokens.access_token);
+            } else {
+                setIsLoggedIn(false);
+            }
+        } 
+        catch(err){
+            hs.error(err);
+        } 
+        finally {
+            toggleSpinner("refresh_button");
+        }
+    }
+
+    const onClickLogout = () => {
+        toggleSpinner("logout_button");
+        setTimeout(() => {
+            toggleSpinner("logout_button");
+        }, 3000);
     }
 
     return(
@@ -201,13 +155,21 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                     <>
                         {/* Header */}
                         <div className="flex h-10">
-                            <img className="w-8 h-8 rounded-sm cursor-pointer hover:scale-95 hover:opacity-75" src={channelThumbnailSmall} />
+                            <img className="w-8 h-8 rounded-sm cursor-pointer hover:scale-95 hover:opacity-75" src={profilePictureBase64 ?? `https://placehold.co/32x32?text=${(channelName ?? "O").charAt(0)}`} />
                             <div className="flex flex-col ml-2">
-                                <div className="text-xs mt-[-2px]">rookie</div>
-                                <div className="text-sm">{getPlaylistsResponse.items.length} playlists</div>
+                                <div className="text-xs mt-[-2px]">{channelName ?? "N/A"}</div>
+                                <div className="text-sm">{playlists?.length ?? "0"} playlists</div>
                             </div>
                             <div className="flex flex-col ml-auto text-xs text-right">
                                 <div>{APP_VERSION}</div>
+                                <div className="flex gap-4">
+                                    <LoadingButton id="refresh_button" onClick={onClickRefresh}>
+                                        <div className="link-button">refresh</div>
+                                    </LoadingButton>
+                                    <LoadingButton id="logout_button" onClick={onClickLogout}>
+                                        <div className="link-button">logout</div>
+                                    </LoadingButton>
+                                </div>
                             </div>                
                         </div>
                         {/* Playlists */}
@@ -218,8 +180,8 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                                     Could not find any playlists associated with your account, view them on <a target="_blank" href="https://www.youtube.com/feed/playlists">YouTube</a>
                                 </div>
                             :
-                                <div className="flex flex-col flex-1 min-h-0">
-                                    <div className="flex flex-col gap-2 mt-4 overflow-auto scrollbar">
+                                <div className="flex flex-col flex-1 min-h-0 pt-1">
+                                    <div className="flex flex-col gap-2 overflow-auto scrollbar">
                                         {
                                             playlists.map((playlist, i) => {
                                                 const selected = selectedPlaylists?.includes(playlist.id) ?? false;
@@ -247,7 +209,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
                                     <div className="flex gap-4 mt-2">
                                         <div className="link-button">clear all</div>
                                         <div className="link-button">select all</div>
-                                        <div className="ml-auto link-button">save changes</div>
+                                        <div className="ml-auto"></div>
                                     </div>                           
                                 </div>
                         }                        
@@ -280,6 +242,8 @@ hs.log("online")
 const extensionMode = window.browser ? true : false;
 createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-        <Popup extensionMode={extensionMode} />
+        <SpinnerProvider>
+            <Popup extensionMode={extensionMode} />
+        </SpinnerProvider>
     </React.StrictMode>
 )

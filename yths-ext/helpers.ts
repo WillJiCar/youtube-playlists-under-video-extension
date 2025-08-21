@@ -18,13 +18,15 @@ export class HS {
   }
 
   public log(...args: any[]): void {
-    const timestamp = new Date().toISOString();
-    console.log(`[HS]:${APP_VERSION}`,...args);
+    const err = new Error(); // use error to grab where the code is being called from
+    const file = err.stack?.split("\n")[2]?.trim().split("/") ?? [""]; 
+    const stack = file[file.length -1]?.split("?")[0]; // doesn't show correct file
+
+    console.log.apply(console, [`[HS]:${APP_VERSION}`, ...args]);
   }
 
-  public error(message: string, error?: any): void {
-    const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] ERROR: ${message}`, error || '');
+  public error(error?: any): void {
+    console.error(`[HS]:${APP_VERSION} - ERROR:`, error || '');
   }
 }
 export const hs = HS.getInstance();

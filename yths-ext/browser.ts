@@ -1,7 +1,8 @@
 
 import { v4 as uuid } from "uuid";
-import { APP_TOKEN_KEY, GOOGLE_ACCESS_TOKEN_KEY, hs } from "./helpers";
-import { isTokenValid, type GetTokensResponse } from "./apis";
+import { APP_TOKEN_KEY, convertImageToBase64, GOOGLE_ACCESS_TOKEN_KEY, hs } from "./helpers";
+import { getChannel, getPlaylists, getTokensFromServer, getUserInfo, isTokenValid, type GetTokensResponse } from "./apis";
+import type { PlaylistItem } from "./types";
 
 export const getUserUid = async () => {
     let userUid = null;
@@ -25,10 +26,190 @@ export const getUserUid = async () => {
     }
 
     if(!userUid){
-        console.log("no userUid after attempting to create", userUid);
+        hs.log("no userUid after attempting to create", userUid);
     }
 
     return userUid;
+}
+
+export const getData = async (token: string) => {
+  let playlists: PlaylistItem[] | null | undefined = null;
+  let channelName: string | null | undefined = null;
+  let profilePictureBase64: string | null | undefined = null;
+  let accountName: string | null | undefined = null;
+  let accountId: string | null | undefined = null;
+  let update = false;
+  let error; // { logged_out: true }
+
+  if(window.browser){
+    // get data from browser.storage
+    const storeResponse = await browser.storage.sync.get([
+        "PLAYLISTS",
+        "CHANNEL_NAME",
+        "ACCOUNT_NAME",
+        "PROFILE_PICTURE_BASE64",
+        "ACCOUNT_ID"
+    ]);
+    playlists = storeResponse["PLAYLISTS"];
+    channelName = storeResponse["CHANNEL_NAME"];
+    accountName = storeResponse["ACCOUNT_NAME"];
+    profilePictureBase64 = storeResponse["PROFILE_PICTURE_BASE64"];
+    accountId = storeResponse["ACCOUNT_ID"];
+  } else {
+    // get data from localstorage
+    playlists = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
+    channelName = window.localStorage.getItem("CHANNEL_NAME");
+    accountName = window.localStorage.getItem("ACCOUNT_NAME");
+    profilePictureBase64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
+    accountId = window.localStorage.getItem("ACCOUNT_ID");
+  }
+
+  if(!playlists || (playlists.length > 0 && (playlists[0] as any) == "null")){
+    const playlistsResponse = await getPlaylists(token);
+    playlists = playlistsResponse.items;
+    //hs.log("Got playlists", playlists);            
+    update = true;
+  }
+
+  if(!channelName){
+    const channelResponse = await getChannel(token);
+    if(channelResponse.items.length == 0){
+        throw new Error("Unable to get channel info, invalid account");
+    }
+    const channel = channelResponse.items[0]?.snippet;
+    channelName = channel?.title;
+    //console.log("Got channel name", channelName);
+
+    const profilePictureUrl = channel?.thumbnails?.default?.url;
+    profilePictureBase64 = profilePictureUrl ? await convertImageToBase64(profilePictureUrl) : null;
+    //console.log("Got profile picture (base64)", profilePictureBase64);
+    update = true;
+  }
+
+  if(!accountName || !accountId){
+    const user = await getUserInfo(token);
+    if(!user || user.names.length == 0){
+        throw new Error("Unable to fetch channel name, invalid account");
+    }
+    accountId = user.resourceName;
+    accountName = user.names[0]?.displayName;
+    //console.log("Got account name & id", accountName, accountId);        
+    update = true;
+  }
+  
+  if(update){
+      if(window.browser){
+          // store data in browser.storage
+          await browser.storage.sync.set({
+              PLAYLISTS: playlists,
+              CHANNEL_NAME: channelName,
+              ACCOUNT_NAME: accountName,
+              PROFILE_PICTURE_BASE64: profilePictureBase64,
+              ACCOUNT_ID: accountId
+          });
+      } else {
+          // store data in localstorage
+          window.localStorage.setItem("PLAYLISTS", JSON.stringify(playlists));
+          window.localStorage.setItem("CHANNEL_NAME", channelName ?? "N/A");
+          window.localStorage.setItem("ACCOUNT_NAME", accountName ?? "N/A");
+          window.localStorage.setItem("ACCOUNT_ID", accountId);
+          if(profilePictureBase64)
+              window.localStorage.setItem("PROFILE_PICTURE_BASE64", profilePictureBase64);
+      }   
+  }
+
+  hs.log("data fetched", update ? "from API" : "from storage", channelName);            
+
+  const _appData = { 
+    playlists,
+    accountName,
+    channelName,
+    profilePictureBase64,
+    accountId
+  }
+
+  return _appData;
+}
+
+export const getSelectedPlaylistsFromStorage = async (id: string) => {
+  try{
+      const key = `SELECTED_PLAYLISTS_${id}`;
+
+      let _selectedPlaylists: string[];
+      if(window.browser){
+          const storeResponse = await browser.storage.sync.get(key);
+          _selectedPlaylists = storeResponse[key] ?? [];
+      } else {
+          _selectedPlaylists = JSON.parse(localStorage.getItem(key) ?? "[]");
+      }
+
+      hs.log("fetched selected playlists with key", key);
+      return _selectedPlaylists;
+  } catch(err){
+      hs.error(err);
+  }
+  return [];
+}
+
+export const setSelectedPlaylistsInStorage = async (_selectedPlaylists: string[], id: string) => {
+  try{
+    const key = `SELECTED_PLAYLISTS_${id}`;
+    _selectedPlaylists = _selectedPlaylists ?? [];    
+    if(window.browser){
+        await browser.storage.sync.set({ [key]: _selectedPlaylists });
+    } else {
+        localStorage.setItem(key, JSON.stringify(_selectedPlaylists));
+    }
+
+    hs.log("stored selected playlists with key", key);
+  } catch(err){
+    hs.error(err);
+  }
+}
+
+export const callGetTokens = async (refresh?: boolean) => {
+
+  let tokens: StoredTokens | null = null;
+  if(!refresh){
+    // first check if any tokens in storage, if none then login required
+    if(window.browser){
+      tokens = await window.browser.runtime.sendMessage({ action: "getToken" }) as StoredTokens;
+    } else {
+      tokens = await getTokensFromStorage();
+    }       
+  }
+
+  const { access_token } = tokens ?? {};
+  // then check if stored access_token is valid, if invalid, attempt a refresh
+  if(access_token){
+    const valid = await isTokenValid(access_token);
+    if (!valid) {
+      refresh = true;
+    } else{
+      hs.log("access_token: valid");
+    }
+  }
+
+  if(refresh){
+    hs.log("access_token: invalid, attempting refresh...");
+    tokens = await getTokensFromServer();
+
+    if(!tokens || !tokens.access_token){
+      hs.log("refresh failure: tokens missing from response, clearing stored tokens");
+      await clearTokensFromStorage();
+    }
+  }
+
+  return tokens;
+}
+
+export const clearTokensFromStorage = async () => {
+  if(window.browser){
+    await browser.storage.sync.remove([GOOGLE_ACCESS_TOKEN_KEY, APP_TOKEN_KEY]);
+  } else {
+    window.localStorage.removeItem(GOOGLE_ACCESS_TOKEN_KEY);
+    window.localStorage.removeItem(APP_TOKEN_KEY);
+  }
 }
 
 export const storeTokensInStorage = async (tokens: GetTokensResponse) => {
@@ -72,13 +253,7 @@ export const getTokensFromStorage = async (sendResponse?: (sendResponse?: any) =
   }
 
   if(access_token){
-    const valid = await isTokenValid(access_token);
-    if (!valid) {
-      hs.log("access_token: invalid or expired");
-      // todo - sendResponse({ error_code: "invalid" })
-    } else{
-      hs.log("access_token: valid");
-    }
+    hs.log("access_token: found (requires validation)");
   } 
   else {
     hs.log("access_token: missing");

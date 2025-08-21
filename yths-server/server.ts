@@ -1,34 +1,21 @@
+import { PORT } from "./config";
 import express from "express";
-import config from "../config.json";
 import cors from 'cors';
 import cookieParser from "cookie-parser";
 import fs from "fs";
 import https from "https";
-import dotenv from "dotenv";
 import url from "url";
 import path from "path";
 import crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { Response } from "express";
 import { base64url, createOAuth2Client, encodeJwt, getAuthUrl, getCallbackHtml, getOAuth2Client, decodeJwt, randomBytesUrl, getAppToken, isOld } from "./services";
-import { Credentials } from "google-auth-library";
+import { Credentials, OAuth2Client } from "google-auth-library";
+import { loadFromDisk, saveToDisk } from "./store";
 
-dotenv.config({
-  path: "../.env"
-});
+
 
 const app = express();
-const PORT = config.proxyPort; // json config is shared with the extension
-
-export const CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? "mock_";
-export const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? "secret_";
-export const STATE_SIGNING_SECRET = process.env.STATE_SIGNING_SECRET;
-export const DOMAIN = process.env.DOMAIN;
-if(!STATE_SIGNING_SECRET){
-  throw new Error("STATE_SIGNING_SECRET required but is missing");
-}
-export const REDIRECT_URI = `https://${DOMAIN}:${PORT}/auth/callback`;
-const AUTH_STATE = crypto.randomBytes(32).toString("hex");
 
 const keyPath = "../certs/localhost-key.pem";
 const certPath = "../certs/localhost.pem";
@@ -48,8 +35,20 @@ if(fs.existsSync(certPath) && fs.existsSync(keyPath)){
   server = app;
 }
 
-const userClients = new Map<string, Credentials>();
+const userCredentials: Map<string, Credentials> = loadFromDisk();
 const pendingAuth = new Map();
+
+// Auto-save every 10 seconds
+setInterval(() => {
+  saveToDisk(userCredentials);
+}, 10000);
+
+// Save on exit
+process.on("SIGINT", () => {
+  console.log("Shutting down...");
+  saveToDisk(userCredentials);
+  process.exit();
+});
 
 app.use("/assets", express.static(path.join(__dirname, "wwwroot")));
 
@@ -85,8 +84,7 @@ app.get("/auth/login", async (req, res) => {
   const nonce = uuidv4();
   const state = await encodeJwt(nonce);
 
-  const oauth2Client = createOAuth2Client();
-  const url = getAuthUrl(oauth2Client, state, code_challenge);
+  const url = getAuthUrl(state, code_challenge);
 
   pendingAuth.set(nonce, { code_verifier, createdAt: Date.now(), app_token: appToken, userUid });
   // remove old entries
@@ -125,19 +123,23 @@ app.get("/auth/callback", async (req, res) => {
       return badRequest(res, "Expired session");
     }
 
-    console.log("fetching token for user", tx);
+    console.log("fetching token for user", userUid);
 
     const oauth2Client = createOAuth2Client();       
     const { tokens } = await oauth2Client.getToken({ code: code, codeVerifier: code_verifier });
     oauth2Client.setCredentials(tokens);
     const token = tokens.access_token;
+
+    if(!tokens.refresh_token){
+      console.log("WARNING user has authenticated but refresh_token not available for user", userUid);
+    }
     
     if(token){
 
       if(userUid){
-        userClients.set(userUid, tokens);
+        userCredentials.set(userUid, tokens);
       } else {
-        console.log("userUid not found");
+        console.log("userUid not found, unable to store client");
       }
 
       res.send(getCallbackHtml(token, app_token));
@@ -162,18 +164,25 @@ app.get("/auth/token", async (req, res) => {
       return badRequest(res, "Failed decoding JWT, missing uuid");
     }
 
-    const storedToken = userClients.get(uuid);
-    if(!storedToken?.refresh_token){
-      return badRequest(res, "No refresh token available");
+    const credential = userCredentials.get(uuid);
+    if(!credential){
+      return badRequest(res, "No credentials available for " + uuid); 
     }
 
-    const client = getOAuth2Client(storedToken);
+    const client = createOAuth2Client();
+    client.setCredentials(credential);
+
+    if(!client || !client.refreshAccessToken){
+      return badRequest(res, `No client available, client present: ${!!client}, refreshAccessToken present: ${!!client.refreshAccessToken}`);
+    }
+
     await client.refreshAccessToken();
 
-    const { access_token, expiry_date, refresh_token } = client.credentials;
-    console.log("refresh_token", refresh_token);
+    const { access_token, expiry_date, refresh_token } = client.credentials;    
 
     const newAppToken = await getAppToken(uuid);
+
+    console.log("tokens refreshed for user", uuid);
 
     res.json({
       access_token, expiry_date, app_token: newAppToken
