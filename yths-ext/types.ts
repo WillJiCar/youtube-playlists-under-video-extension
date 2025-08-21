@@ -55,6 +55,8 @@ export interface PlaylistsResponse {
     items: PlaylistItem[]
     kind: string
     pageInfo: PageInfo
+    nextPageToken?: string | null
+    prevPageToken?: string | null
 }
 
 // Get User Info -- https://people.googleapis.com/v1/:resourceName?personFields=names

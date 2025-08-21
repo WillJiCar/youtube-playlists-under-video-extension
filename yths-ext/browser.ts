@@ -32,7 +32,7 @@ export const getUserUid = async () => {
     return userUid;
 }
 
-export const getData = async (token: string) => {
+export const getData = async (token: string, forceRefresh?: boolean) => {
   let playlists: PlaylistItem[] | null | undefined = null;
   let channelName: string | null | undefined = null;
   let profilePictureBase64: string | null | undefined = null;
@@ -41,32 +41,34 @@ export const getData = async (token: string) => {
   let update = false;
   let error; // { logged_out: true }
 
-  if(window.browser){
-    // get data from browser.storage
-    const storeResponse = await browser.storage.sync.get([
-        "PLAYLISTS",
-        "CHANNEL_NAME",
-        "ACCOUNT_NAME",
-        "PROFILE_PICTURE_BASE64",
-        "ACCOUNT_ID"
-    ]);
-    playlists = storeResponse["PLAYLISTS"];
-    channelName = storeResponse["CHANNEL_NAME"];
-    accountName = storeResponse["ACCOUNT_NAME"];
-    profilePictureBase64 = storeResponse["PROFILE_PICTURE_BASE64"];
-    accountId = storeResponse["ACCOUNT_ID"];
-  } else {
-    // get data from localstorage
-    playlists = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
-    channelName = window.localStorage.getItem("CHANNEL_NAME");
-    accountName = window.localStorage.getItem("ACCOUNT_NAME");
-    profilePictureBase64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
-    accountId = window.localStorage.getItem("ACCOUNT_ID");
+  if(!forceRefresh){
+    if(window.browser){
+      // get data from browser.storage
+      const storeResponse = await browser.storage.sync.get([
+          "PLAYLISTS",
+          "CHANNEL_NAME",
+          "ACCOUNT_NAME",
+          "PROFILE_PICTURE_BASE64",
+          "ACCOUNT_ID"
+      ]);
+      playlists = storeResponse["PLAYLISTS"];
+      channelName = storeResponse["CHANNEL_NAME"];
+      accountName = storeResponse["ACCOUNT_NAME"];
+      profilePictureBase64 = storeResponse["PROFILE_PICTURE_BASE64"];
+      accountId = storeResponse["ACCOUNT_ID"];
+    } else {
+      // get data from localstorage
+      playlists = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
+      channelName = window.localStorage.getItem("CHANNEL_NAME");
+      accountName = window.localStorage.getItem("ACCOUNT_NAME");
+      profilePictureBase64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
+      accountId = window.localStorage.getItem("ACCOUNT_ID");
+    }
   }
 
   if(!playlists || (playlists.length > 0 && (playlists[0] as any) == "null")){
     const playlistsResponse = await getPlaylists(token);
-    playlists = playlistsResponse.items;
+    playlists = playlistsResponse;
     //hs.log("Got playlists", playlists);            
     update = true;
   }

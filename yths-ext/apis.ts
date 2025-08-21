@@ -3,7 +3,7 @@
 
 import { getTokensFromStorage, getUserUid, storeTokensInStorage, type StoredTokens } from "./browser";
 import { hs } from "./helpers";
-import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse } from "./types";
+import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse, PlaylistItem } from "./types";
 
 const scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile";
 
@@ -189,7 +189,7 @@ export const login = async (sendResponse?: (sendResponse?: any) => void) => {
     hs.log("tokens fetched");
     await storeTokensInStorage(tokens);
   } else {
-    hs.log("login success, tokens missing");
+    hs.log("login flow finished but tokens missing");
   }
 
   
@@ -198,10 +198,36 @@ export const login = async (sendResponse?: (sendResponse?: any) => void) => {
 }
 
 // -- GOOGLE API'S
-export const getPlaylists = async (token: string): Promise<PlaylistsResponse> => {
-  return await fetch("https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50", { 
-    headers: { Authorization: `Bearer ${token}` } 
-  }).then(res => res.json());
+export const getPlaylists = async (token: string, pageToken?: string | null) => {
+  const MAX = 50;
+  const TOTAL_MAX = 500;
+  let playlists: PlaylistItem[] = [];
+  let attempt = 1;
+  let blocked = false;
+  while(!blocked){
+    try{      
+      const playlistResponse = await fetch(`https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=${MAX}${pageToken ? `&pageToken=${pageToken}` : ""}`, { 
+        headers: { Authorization: `Bearer ${token}` } 
+      }).then(res => res.json()) as PlaylistsResponse;
+
+      if((playlistResponse as any).error){
+        blocked = true;
+      }      
+      playlists.push(...playlistResponse.items);
+      pageToken = playlistResponse.nextPageToken;
+      if(playlists.length >= TOTAL_MAX || !playlistResponse.nextPageToken){
+        blocked = true;
+        console.log("Finished fetching", playlists.length, "in", attempt, "attempts");
+      }
+      attempt++;
+    }
+    catch(err){
+      console.log("Error calling api", err);
+      blocked = true;
+    }
+  }
+
+  return playlists;
 }
 
 export const getUserInfo = async (token: string) => {
@@ -227,3 +253,36 @@ export const getChannel = async (token: string): Promise<ChannelResponse> => {
     headers: { Authorization: `Bearer ${token}` } 
   }).then(res => res.json());
 }
+
+const wait = async (ms: number) => {
+  return await new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  })
+}
+
+/*
+(window as any).testToken = "ya29.A0AS3H6NxoBotb67vt3VozynE73OG0DwM8TneTmDucrB9IrRhP2ynuFCuVHNhyv_wYy5gVipfsZ-3aAmaMPregHkJGTmEjHZHv_KODd9FuqtnbBavI7293rpEDl20zBZEVEItbTTQTPGDW50OjrVe7E0sI_Stu7j7NKFQt8EBJlY0O1mxATEDWCiv7s9duuEibsQVhWfsaCgYKAVQSARMSFQHGX2Mi5Ga1i0DJyT5vMgjxKjJr3g0206";
+
+(async () => {
+  let call = 1;
+  let blocked = false;
+  let nextPageToken;
+  while(!blocked){
+    try{
+      
+      const playlists = await getPlaylists((window as any).testToken, nextPageToken);
+      if((playlists as any).error){
+        blocked = true;
+      }
+      nextPageToken = playlists.nextPageToken;
+      console.log("called api", call, playlists);
+      call++;
+      await wait(10);
+    }
+    catch(err){
+      console.log("Error calling api", err);
+      blocked = true;
+    }
+  }
+})
+*/
