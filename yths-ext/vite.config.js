@@ -21,7 +21,7 @@ export default defineConfig(async () => {
         })],
         root: ".",
         build: {
-            outDir: "dist-ext",
+            outDir: "./dist",
             rollupOptions: {
                 input: {
                     popup: resolve(__dirname, "popup/popup.html"),

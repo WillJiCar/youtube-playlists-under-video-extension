@@ -1,9 +1,9 @@
 
 // console - https://console.cloud.google.com/apis/api/youtube.googleapis.com/metrics?authuser=1&inv=1&invt=Ab5vyA&project=youtube-playlists-under-video
 
-import { getTokensFromStorage, getUserUid, storeTokensInStorage, type StoredTokens } from "./browser";
+import { callGetTokens, getTokensFromStorage, getUserUid, storeTokensInStorage, type StoredTokens } from "./browser";
 import { hs } from "./helpers";
-import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse, PlaylistItem } from "./types";
+import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse, PlaylistItem, PlaylistItemListResponse } from "./types";
 
 const scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile";
 
@@ -254,11 +254,54 @@ export const getChannel = async (token: string): Promise<ChannelResponse> => {
   }).then(res => res.json());
 }
 
-const wait = async (ms: number) => {
-  return await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  })
+export const checkPlaylistsForVideoId = async (videoId: string, playlists: PlaylistItem[]) => {
+  for (let i = 0; i < playlists.length; i++) {
+    const playlist = playlists[i];
+
+    if(!playlist){
+      hs.log("playlist at index", i, "empty, skipping video check");
+      continue;
+    }
+
+    const inPlaylist = await isVideoInPlaylist(videoId, playlist.id);
+    (playlist as any).containsCurrentVideo = inPlaylist;
+  }
+
+  return playlists;
 }
+
+export const isVideoInPlaylist = async (videoId: string, playlistId: string) => {
+  try{
+    const tokens = await callGetTokens()
+    if(!tokens){
+      hs.log("failed to check if video in playlist, client is probably logged out");
+      return null;
+    }
+    hs.log("checking if video", videoId, "is in playlist", playlistId);
+    const _res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=id&playlistId=${playlistId}&videoId=${videoId}`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` } 
+    });
+    const res = await _res.json() as PlaylistItemListResponse;
+    if(!_res.ok && !res.error){
+      hs.log("failed to check if video in playlist, request responded error");
+      return null;
+    }
+
+    if(res.error){
+      hs.log("failed to check if video in playlist,", res.error.message ?? "youtube API error")
+      return null;
+    }
+
+    hs.log("video", videoId, "in playlist", playlistId, res.items.length > 0)
+    return res.items.length > 0
+  } 
+  catch(err){
+    hs.error(err);
+    return null;
+  }
+}
+
+
 
 /*
 (window as any).testToken = "ya29.A0AS3H6NxoBotb67vt3VozynE73OG0DwM8TneTmDucrB9IrRhP2ynuFCuVHNhyv_wYy5gVipfsZ-3aAmaMPregHkJGTmEjHZHv_KODd9FuqtnbBavI7293rpEDl20zBZEVEItbTTQTPGDW50OjrVe7E0sI_Stu7j7NKFQt8EBJlY0O1mxATEDWCiv7s9duuEibsQVhWfsaCgYKAVQSARMSFQHGX2Mi5Ga1i0DJyT5vMgjxKjJr3g0206";

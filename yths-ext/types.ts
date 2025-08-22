@@ -26,6 +26,12 @@ export interface Localized {
     description: string;
 }
 
+export interface GoogleError {
+    code?: number | null
+    message?: string | null
+    errors?: any[] | null
+}
+
 // -- Get Playlists https://www.googleapis.com/youtube/v3/playlists?part=snippet&mine=true&maxResults=50
 
 export interface PlaylistThumbnail {
@@ -48,6 +54,7 @@ export interface PlaylistItem {
     id: string
     kind: string
     snippet: PlaylistSnippet
+    containsCurrentVideo?: boolean // set via our stored selected playlists
 }
 
 export interface PlaylistsResponse {
@@ -57,6 +64,16 @@ export interface PlaylistsResponse {
     pageInfo: PageInfo
     nextPageToken?: string | null
     prevPageToken?: string | null
+}
+
+// Get Playlist Items - https://www.googleapis.com/youtube/v3/playlistItems?part=id&playlistId=${playlistId}&videoId=${videoId}
+
+export interface PlaylistItemListResponse {
+    kind: string
+    etag: string
+    items: { kind: string, etag: string, id: string }[]
+    pageInfo: { totalResults: number, resultsPerPage: number }
+    error?: GoogleError | null
 }
 
 // Get User Info -- https://people.googleapis.com/v1/:resourceName?personFields=names

@@ -7,12 +7,12 @@
     "yths-ext"
   ],
   "scripts": {
-    "dev": "concurrently -k -n SERVER,REACT,EXT -c blue,green,magenta \"npm run dev:server\" \"npm run dev:vitebuild\" \"npm run dev:ext\"",
-    "dev:sim": "concurrently -k -n SERVER,REACT -c blue,green \"npm run dev:server\" \"npm run dev:vite\"",
-    "dev:vite": "yarn workspace yths-ext dev:vite",
-    "dev:vitebuild": "yarn workspace yths-ext dev:vitebuild",
-    "dev:ext": "yarn workspace yths-ext dev:ext",
-    "dev:server": "yarn workspace yths-server dev",
-    "build:server": "yarn workspace yths-server build"
+    "dev": "concurrently -k -n SERVER,REACT,EXT -c blue,green,magenta \"yarn dev-server\" \"yarn dev-vitebuild\" \"yarn dev-ext\"",
+    "dev-sim": "concurrently -k -n SERVER,REACT -c blue,green \"yarn dev-server\" \"yarn dev-vite\"",
+    "dev-ite": "yarn workspace yths-ext run dev-vite",
+    "dev-vitebuild": "yarn workspace yths-ext run dev-vitebuild",
+    "dev-ext": "yarn workspace yths-ext run dev-ext",
+    "dev-server": "yarn workspace yths-server run dev",
+    "build-server": "yarn workspace yths-server run build"
   }
 }

@@ -144,3 +144,4 @@ certs
 ext/google-json-responses.txt.ts
 yths-ext/google-json-responses.txt.ts
 credentials.enc
+yths-ext/dist-ext

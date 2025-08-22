@@ -4,6 +4,11 @@ import { APP_TOKEN_KEY, convertImageToBase64, GOOGLE_ACCESS_TOKEN_KEY, hs } from
 import { getChannel, getPlaylists, getTokensFromServer, getUserInfo, isTokenValid, type GetTokensResponse } from "./apis";
 import type { PlaylistItem } from "./types";
 
+console.log("window.location.href", window.location.href);
+const backgroundPage = window.browser ? (browser.runtime.getManifest()?.background as any)?.page : "N/A";
+console.log("background_page", backgroundPage);
+const isBackgroundPage = window.location.href == backgroundPage;
+
 export const getUserUid = async () => {
     let userUid = null;
     
@@ -32,38 +37,51 @@ export const getUserUid = async () => {
     return userUid;
 }
 
-export const getData = async (token: string, forceRefresh?: boolean) => {
+export const getDataFromStorage = async () => {
+
   let playlists: PlaylistItem[] | null | undefined = null;
   let channelName: string | null | undefined = null;
   let profilePictureBase64: string | null | undefined = null;
   let accountName: string | null | undefined = null;
   let accountId: string | null | undefined = null;
+
+  if(window.browser){
+    // get data from browser.storage
+    const storeResponse = await browser.storage.local.get([
+        "PLAYLISTS",
+        "CHANNEL_NAME",
+        "ACCOUNT_NAME",
+        "PROFILE_PICTURE_BASE64",
+        "ACCOUNT_ID"
+    ]);
+    playlists = storeResponse["PLAYLISTS"];
+    channelName = storeResponse["CHANNEL_NAME"];
+    accountName = storeResponse["ACCOUNT_NAME"];
+    profilePictureBase64 = storeResponse["PROFILE_PICTURE_BASE64"];
+    accountId = storeResponse["ACCOUNT_ID"];
+  } else {
+    // get data from localstorage
+    playlists = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
+    channelName = window.localStorage.getItem("CHANNEL_NAME");
+    accountName = window.localStorage.getItem("ACCOUNT_NAME");
+    profilePictureBase64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
+    accountId = window.localStorage.getItem("ACCOUNT_ID");
+  }
+
+  return {
+    playlists, channelName, profilePictureBase64, accountName, accountId
+  }
+}
+
+export const getData = async (token: string, forceRefresh?: boolean) => {
+  
   let update = false;
+  let data = !forceRefresh ? await getDataFromStorage() : {} as Awaited<ReturnType<typeof getDataFromStorage>>;
+  let { accountId, accountName, channelName, playlists, profilePictureBase64  } = data ?? {};
   let error; // { logged_out: true }
 
   if(!forceRefresh){
-    if(window.browser){
-      // get data from browser.storage
-      const storeResponse = await browser.storage.sync.get([
-          "PLAYLISTS",
-          "CHANNEL_NAME",
-          "ACCOUNT_NAME",
-          "PROFILE_PICTURE_BASE64",
-          "ACCOUNT_ID"
-      ]);
-      playlists = storeResponse["PLAYLISTS"];
-      channelName = storeResponse["CHANNEL_NAME"];
-      accountName = storeResponse["ACCOUNT_NAME"];
-      profilePictureBase64 = storeResponse["PROFILE_PICTURE_BASE64"];
-      accountId = storeResponse["ACCOUNT_ID"];
-    } else {
-      // get data from localstorage
-      playlists = JSON.parse(window.localStorage.getItem("PLAYLISTS") ?? "['null']");
-      channelName = window.localStorage.getItem("CHANNEL_NAME");
-      accountName = window.localStorage.getItem("ACCOUNT_NAME");
-      profilePictureBase64 = window.localStorage.getItem("PROFILE_PICTURE_BASE64");
-      accountId = window.localStorage.getItem("ACCOUNT_ID");
-    }
+    data = await getDataFromStorage();
   }
 
   if(!playlists || (playlists.length > 0 && (playlists[0] as any) == "null")){
@@ -102,7 +120,7 @@ export const getData = async (token: string, forceRefresh?: boolean) => {
   if(update){
       if(window.browser){
           // store data in browser.storage
-          await browser.storage.sync.set({
+          await browser.storage.local.set({
               PLAYLISTS: playlists,
               CHANNEL_NAME: channelName,
               ACCOUNT_NAME: accountName,
@@ -139,13 +157,13 @@ export const getSelectedPlaylistsFromStorage = async (id: string) => {
 
       let _selectedPlaylists: string[];
       if(window.browser){
-          const storeResponse = await browser.storage.sync.get(key);
+          const storeResponse = await browser.storage.local.get(key);
           _selectedPlaylists = storeResponse[key] ?? [];
       } else {
           _selectedPlaylists = JSON.parse(localStorage.getItem(key) ?? "[]");
       }
 
-      hs.log("fetched selected playlists with key", key);
+      hs.log("fetched selected playlists with key", key, _selectedPlaylists.length, "playlists");
       return _selectedPlaylists;
   } catch(err){
       hs.error(err);
@@ -158,7 +176,7 @@ export const setSelectedPlaylistsInStorage = async (_selectedPlaylists: string[]
     const key = `SELECTED_PLAYLISTS_${id}`;
     _selectedPlaylists = _selectedPlaylists ?? [];    
     if(window.browser){
-        await browser.storage.sync.set({ [key]: _selectedPlaylists });
+        await browser.storage.local.set({ [key]: _selectedPlaylists });
     } else {
         localStorage.setItem(key, JSON.stringify(_selectedPlaylists));
     }
@@ -172,34 +190,50 @@ export const setSelectedPlaylistsInStorage = async (_selectedPlaylists: string[]
 export const callGetTokens = async (refresh?: boolean) => {
 
   let tokens: StoredTokens | null = null;
-  if(!refresh){
-    // first check if any tokens in storage, if none then login required
-    if(window.browser){
-      tokens = await window.browser.runtime.sendMessage({ action: "getToken" }) as StoredTokens;
-    } else {
-      tokens = await getTokensFromStorage();
-    }       
-  }
+  try{
+    if(!refresh){
+      // first check if any tokens in storage, if none then login required
+      if(window.browser && !isBackgroundPage){
+        hs.log("checking tokens in extension storage");
+        tokens = await browser.runtime.sendMessage({ action: "getToken" }) as StoredTokens;
+      } else {
+        hs.log("checking tokens in browser storage");
+        tokens = await getTokensFromStorage();
+      }       
+    }
 
-  const { access_token } = tokens ?? {};
-  // then check if stored access_token is valid, if invalid, attempt a refresh
-  if(access_token){
-    const valid = await isTokenValid(access_token);
-    if (!valid) {
-      refresh = true;
+    if(tokens){
+      hs.log("got tokens from storage");
     } else{
-      hs.log("access_token: valid");
+      hs.log("tokens not found in storage");
+    }
+
+    const { access_token } = tokens ?? {};
+    // then check if stored access_token is valid, if invalid, attempt a refresh
+    if(access_token){
+      const valid = await isTokenValid(access_token);
+      if (!valid) {
+        refresh = true;
+        hs.log("access_token: invalid");
+      } else{
+        hs.log("access_token: valid");
+      }
+    } else {
+      hs.log("unable to check if token is valid, access_token missing")
+    }
+
+    if(refresh){
+      hs.log("access_token - attempting refresh...");
+      tokens = await getTokensFromServer();
+
+      if(!tokens || !tokens.access_token){
+        hs.log("refresh failure: tokens missing from response, clearing stored tokens");
+        await clearTokensFromStorage();
+      }
     }
   }
-
-  if(refresh){
-    hs.log("access_token: invalid, attempting refresh...");
-    tokens = await getTokensFromServer();
-
-    if(!tokens || !tokens.access_token){
-      hs.log("refresh failure: tokens missing from response, clearing stored tokens");
-      await clearTokensFromStorage();
-    }
+  catch(err){
+    hs.log("ERROR at callGetToken", err);
   }
 
   return tokens;
@@ -207,7 +241,7 @@ export const callGetTokens = async (refresh?: boolean) => {
 
 export const clearTokensFromStorage = async () => {
   if(window.browser){
-    await browser.storage.sync.remove([GOOGLE_ACCESS_TOKEN_KEY, APP_TOKEN_KEY]);
+    await browser.storage.local.remove([GOOGLE_ACCESS_TOKEN_KEY, APP_TOKEN_KEY]);
   } else {
     window.localStorage.removeItem(GOOGLE_ACCESS_TOKEN_KEY);
     window.localStorage.removeItem(APP_TOKEN_KEY);
