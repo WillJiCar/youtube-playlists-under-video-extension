@@ -3,7 +3,7 @@
 
 import { callGetTokens, getTokensFromStorage, getUserUid, storeTokensInStorage, type StoredTokens } from "./browser";
 import { hs } from "./helpers";
-import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse, PlaylistItem, PlaylistItemListResponse } from "./types";
+import type { PeopleApiResponse, PlaylistsResponse, ChannelResponse, PlaylistItem, PlaylistItemListResponse, PlaylistItemResponse } from "./types";
 
 const scopes = "https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.profile";
 
@@ -35,6 +35,15 @@ export async function isTokenValid(token: string) {
     console.log("Token validation failed", err);
     return false;
   }
+}
+
+// -- HSYT Playlist Items cache
+
+const usePlaylistCache = false; // cache was used to store latest playlistItemId API fetch response, however to mitigate the change of a playlist being modified externally and cache being incorrect this has been disabled and instead a debounce on the storage onChanged event has been applied
+const playlistCache = new Map<string, string | null | undefined>();
+
+function makeKey(videoId: string, playlistId: string) {
+  return `${videoId}:${playlistId}`;
 }
 
 // -- HSYT API'S
@@ -118,13 +127,13 @@ export const login = async (sendResponse?: (sendResponse?: any) => void) => {
       tokens = await new Promise<any>((resolve) => {
         browser.tabs.onRemoved.addListener((tabId) =>{
           if(tabId == tab.id){
-            hs.log("tab closed by user");
+            hs.log("tab closed");
             resolve(null);
           }
         });
         browser.runtime.onMessage.addListener(function listener(message) {
           hs.log("got message", message);
-          if (message.type == 'OAUTH_RESULT') {
+          if (message.action == 'OAUTH_RESULT') {
             hs.log("auth success");
             browser.tabs.remove(tab.id!);
             resolve(message); 
@@ -145,7 +154,7 @@ export const login = async (sendResponse?: (sendResponse?: any) => void) => {
 
         window.addEventListener("message", (ev) => {
           const message = ev.data;
-          if(ev.source == popup && message.type == "OAUTH_RESULT"){            
+          if(ev.source == popup && message.action == "OAUTH_RESULT"){            
             hs.log("auth received");
             popup?.close();
             resolve(message);
@@ -263,14 +272,25 @@ export const checkPlaylistsForVideoId = async (videoId: string, playlists: Playl
       continue;
     }
 
-    const inPlaylist = await isVideoInPlaylist(videoId, playlist.id);
-    (playlist as any).containsCurrentVideo = inPlaylist;
+    const key = makeKey(videoId, playlist.id);
+
+    let playlistItemId: string | null | undefined;
+    if (playlistCache.has(key) && usePlaylistCache) {
+      playlistItemId = playlistCache.get(key)!;
+      hs.log("playlistItemId check performed via cache");
+    } else {
+      playlistItemId = await getPlaylistItemId(videoId, playlist.id);
+      playlistCache.set(key, playlistItemId);
+      hs.log("playlistItemId check performed via API and stored in cache", key, playlistItemId);
+    }
+
+    playlist.playlistItemId = playlistItemId;
   }
 
   return playlists;
 }
 
-export const isVideoInPlaylist = async (videoId: string, playlistId: string) => {
+export const getPlaylistItemId = async (videoId: string, playlistId: string) => {
   try{
     const tokens = await callGetTokens()
     if(!tokens){
@@ -283,7 +303,7 @@ export const isVideoInPlaylist = async (videoId: string, playlistId: string) => 
     });
     const res = await _res.json() as PlaylistItemListResponse;
     if(!_res.ok && !res.error){
-      hs.log("failed to check if video in playlist, request responded error");
+      hs.log("failed to check if video in playlist, request failed", _res.status, _res.statusText);
       return null;
     }
 
@@ -293,11 +313,96 @@ export const isVideoInPlaylist = async (videoId: string, playlistId: string) => 
     }
 
     hs.log("video", videoId, "in playlist", playlistId, res.items.length > 0)
-    return res.items.length > 0
+    return res.items.length > 0 ? res.items[0]?.id : null;
   } 
   catch(err){
     hs.error(err);
     return null;
+  }
+}
+
+export const addVideoToPlaylist = async (playlistId?: string, videoId?: string) => {
+  try{
+    if(!playlistId || !videoId){
+      hs.log("unable to add video", videoId, "to playlist", playlistId, "as one of the arguments is missing");
+      return null;
+    }
+    const tokens = await callGetTokens()
+    if(!tokens){
+      hs.log("failed to add video to playlist, client is probably logged out");
+      return null;
+    }
+    hs.log("adding video", videoId, "to playlist", playlistId);
+    const _res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+      body: JSON.stringify({
+        snippet: {
+          playlistId: playlistId,
+          resourceId: { 
+              kind: "youtube#video",
+              videoId: videoId
+          }
+        }
+      }),
+      method: "POST" 
+    });
+    const res = await _res.json() as PlaylistItemResponse;
+    if(!_res.ok && !res.error){
+      hs.log("failed to add video to playlist, request failed", _res.status, _res.statusText);
+      return null;
+    }
+
+    if(res.error){
+      hs.log("failed to add video to playlist,", res.error.message ?? "youtube API error")
+      return null;
+    }
+
+    hs.log("video added to playlist, playlistItemId:", res.id);
+    if(res.id){
+      const key = makeKey(videoId, playlistId);
+      playlistCache.set(key, res.id);
+    }
+    return res.id;
+  } 
+  catch(err){
+    hs.error(err);
+    return null;
+  }
+}
+
+export const removeVideoFromPlaylist = async (playlistItemId?: string) => {
+  try{
+    if(!playlistItemId){
+      hs.log("unable to remove video from playlist using playlistItemId as it's missing");
+      return false;
+    }
+    const tokens = await callGetTokens()
+    if(!tokens){
+      hs.log("failed to remove video from playlist, client is probably logged out");
+      return false;
+    }
+    hs.log("removing video from playlist with playlistItemId", playlistItemId);
+    const _res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?id=${playlistItemId}`, {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+      method: "DELETE" 
+    });
+    if(_res.ok){
+      hs.log("video removed from playlist");
+      for (const [key, id] of playlistCache.entries()) {
+        if (id === playlistItemId) {
+          playlistCache.set(key, null);
+          break;
+        }
+      }
+      return true;
+    } else {
+      hs.log("error encountered while removing video from playlist", _res.status, _res.statusText);
+      return false;
+    }
+  } 
+  catch(err){
+    hs.error(err);
+    return false;
   }
 }
 

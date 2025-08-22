@@ -41,7 +41,7 @@ const Popup = (props?: { extensionMode?: boolean }) => {
             (async () => {
                 try{
                     setIsInitializing(true);
-                    getUserUid(); // will set new uuid if none available
+                    await getUserUid(); // will set new uuid if none available
                     const tokens = await callGetTokens();
                     if(tokens?.access_token){                            
                         await onFetchData(tokens.access_token);

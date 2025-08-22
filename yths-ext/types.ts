@@ -54,7 +54,7 @@ export interface PlaylistItem {
     id: string
     kind: string
     snippet: PlaylistSnippet
-    containsCurrentVideo?: boolean // set via our stored selected playlists
+    playlistItemId?: string | null | undefined // populated when content script detects page is a YouTube video and the video is in this playlist
 }
 
 export interface PlaylistsResponse {
@@ -73,6 +73,15 @@ export interface PlaylistItemListResponse {
     etag: string
     items: { kind: string, etag: string, id: string }[]
     pageInfo: { totalResults: number, resultsPerPage: number }
+    error?: GoogleError | null
+}
+
+// Add / Remove video from playlist - https://www.googleapis.com/youtube/v3/playlistItems?part=snippet
+
+export interface PlaylistItemResponse {
+    kind: string
+    etag: string
+    id: string
     error?: GoogleError | null
 }
 

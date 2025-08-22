@@ -90,7 +90,7 @@ export const getCallbackHtml = (google_token: string, app_token: string) => {
         localStorage.setItem('YTHS_APP_TOKEN', '${app_token}');
         if (window.opener) {
             window.opener.postMessage({
-                type: "OAUTH_RESULT",
+                action: "OAUTH_RESULT",
                 access_token: '${google_token}',
                 app_token: '${app_token}'
             }, "*");
