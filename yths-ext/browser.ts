@@ -4,9 +4,8 @@ import { APP_TOKEN_KEY, convertImageToBase64, GOOGLE_ACCESS_TOKEN_KEY, hs } from
 import { getChannel, getPlaylists, getTokensFromServer, getUserInfo, isTokenValid, type GetTokensResponse } from "./apis";
 import type { PlaylistItem } from "./types";
 
-console.log("window.location.href", window.location.href);
+hs.log("window.location.href", window.location.href);
 const backgroundPage = window.browser ? (browser.runtime.getManifest()?.background as any)?.page : "N/A";
-console.log("background_page", backgroundPage);
 const isBackgroundPage = window.location.href == backgroundPage;
 
 export const getUserUid = async () => {
@@ -163,7 +162,7 @@ export const getSelectedPlaylistsFromStorage = async (id: string) => {
           _selectedPlaylists = JSON.parse(localStorage.getItem(key) ?? "[]");
       }
 
-      hs.log("fetched selected playlists with key", key, _selectedPlaylists.length, "playlists");
+      hs.log("fetched", _selectedPlaylists.length, "selected playlists with key", key);
       return _selectedPlaylists;
   } catch(err){
       hs.error(err);
@@ -229,6 +228,8 @@ export const callGetTokens = async (refresh?: boolean) => {
       if(!tokens || !tokens.access_token){
         hs.log("refresh failure: tokens missing from response, clearing stored tokens");
         await clearTokensFromStorage();
+      } else {
+        hs.log("access_token: refresed")
       }
     }
   }

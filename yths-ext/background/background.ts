@@ -1,6 +1,19 @@
 import { addVideoToPlaylist, checkPlaylistsForVideoId, login, removeVideoFromPlaylist } from "../apis.js";
 import { getDataFromStorage, getSelectedPlaylistsFromStorage, getTokensFromStorage } from "../browser.js";
 import { hs } from "../helpers.js";
+import * as Sentry from "@sentry/browser";
+
+/*
+ background.ts - runs in the background of browser extension, defined in background.html & manifest.json
+  handles incoming messages (requests) from content.ts (YouTube video page) and browser.ts (Popup.tsx)
+*/
+
+Sentry.onLoad(function() {
+  Sentry.init({
+    dsn: "https://656139ed930d06dc9ed17c70085f6cd1@o4509890243788800.ingest.de.sentry.io/4509890251063376"
+      
+  });
+});
 
 export interface BrowserMessage {
   action: "getToken" | "login" | "OAUTH_RESULT"

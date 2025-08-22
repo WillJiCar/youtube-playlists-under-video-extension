@@ -8,7 +8,7 @@
     ],
     "resolveJsonModule": true,
     "lib": ["dom", "ESNext"],
-    "sourceMap": false,
+    "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
     "noUncheckedIndexedAccess": true,

@@ -39,8 +39,16 @@ export async function isTokenValid(token: string) {
 
 // -- HSYT Playlist Items cache
 
-const usePlaylistCache = false; // cache was used to store latest playlistItemId API fetch response, however to mitigate the change of a playlist being modified externally and cache being incorrect this has been disabled and instead a debounce on the storage onChanged event has been applied
+const usePlaylistCache = true; // cache was used to store latest playlistItemId API fetch response, however to mitigate the change of a playlist being modified externally and cache being incorrect this has been disabled and instead a debounce on the storage onChanged event has been applied
 const playlistCache = new Map<string, string | null | undefined>();
+
+setInterval(() => {
+  const size = playlistCache.size;
+  if(size > 0){
+    playlistCache.clear();
+    hs.log("playlist cache cleared of", size, "entries");
+  }
+}, 5 * 60 * 1000) // 5 minute cache
 
 function makeKey(videoId: string, playlistId: string) {
   return `${videoId}:${playlistId}`;
